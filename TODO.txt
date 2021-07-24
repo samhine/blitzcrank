@@ -1,0 +1,6 @@
+- Expanded tests
+- "Grab" functionality to be added
+- Examples utilising: timeline data (with 15 min error checking), rate limit increase
+- "gold diff at 15" changed to "gold diff at minute n" (can then remove incorrect gold_diff_at_10_for_participant)
+- Documentation that follows python module standards
+- Type hinting
