@@ -9,19 +9,20 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
 setup(
     name='blitzcrank',
     packages=find_packages(),
-    version='v1.0',
+    version='0.0.2',
     license='MIT',
     description='The Riot API in Python, made easy.',
     author='Samuel Hine',
     author_email='sam.hine27@gmail.com',
     url='https://github.com/samhine/blitzcrank',
-    download_url='https://github.com/samhine/blitzcrank/archive/refs/tags/v1.0.tar.gz',
+    download_url='https://github.com/samhine/blitzcrank/archive/refs/tags/0.0.2.tar.gz',
     keywords=['PYTHON', 'RIOT', 'API'],
     install_requires=[
         'responses',
         'requests',
         'roleml',
-        'pandas'
+        'pandas',
+        'ratelimit'
     ],
     classifiers=[
         'Development Status :: 4 - Beta',
