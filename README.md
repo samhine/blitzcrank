@@ -1,4 +1,8 @@
 # Blitzcrank
+
+[![PyPi](https://img.shields.io/pypi/v/blitzcrank)](https://pypi.org/project/blitzcrank/)
+[![Downloads](https://pepy.tech/badge/blitzcrank)](https://pepy.tech/project/blitzcrank)
+
 ### Riot API made easy
 
 #### Intoduction
