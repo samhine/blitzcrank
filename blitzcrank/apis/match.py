@@ -54,23 +54,23 @@ class Match:
 
     # NB: Will not work on custom game data since identities of participants is hidden
     def puuid_for_participant(self, participant_id, match_data):
-        account_id = [player["player"]['currentAccountId'] for player in match_data["participants"] if
+        account_id = [player["player"]['currentAccountId'] for player in match_data['info']['participants'] if
                       player["participantId"] == participant_id][0]
         return account_id
 
     # NB: Will not work on custom game data since identities of participants is hidden
     def participant_id_for_summoner(self, puuid, match_data):
-        part_id = [player['participantId'] for player in match_data["participants"] if
+        part_id = [player['participantId'] for player in match_data['info']['participants'] if
                    player["puuid"] == puuid][0]
         return part_id
 
     def summoner_for_participant(self, participant_id, match_data):
-        summoner_name = [player["summonerName"] for player in match_data["participants"] if
+        summoner_name = [player["summonerName"] for player in match_data['info']['participants'] if
                          player["participantId"] == participant_id][0]
         return summoner_name
 
     def side_for_participant(self, participant_id, match_data):
-        side = [info for info in match_data["participants"] if info['participantId'] == participant_id][0]['teamId']
+        side = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]['teamId']
         return "blue" if side == 100 else "red"
 
     def games_for_day(self, day, puuid):
