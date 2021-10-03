@@ -5,8 +5,9 @@ import roleml
 
 class Match:
 
-    def __init__(self, region, session):
+    def __init__(self, region, extended_region, session):
         self.region = region
+        self.extended_region = extended_region
         self.champion = Champion(region, session)
         self.session = session
 
@@ -14,49 +15,36 @@ class Match:
 
     def by_id(self, match_id: str) -> dict:
         return self.session.get(
-            f'https://{self.region}.api.riotgames.com/lol/match/v4/matches/{match_id}'
+            f'https://{self.extended_region}.api.riotgames.com/lol/match/v5/matches/{match_id}'
         ).json()
 
-    def matchlist_by_account(self, encrypted_account_id: str, champion_ids: list = [], queues: list = [],
-                             seasons: list = [], end_time: str = "", begin_time: str = "", end_index: str = "",
-                             begin_index: str = "") -> dict:
-        if champion_ids is None:
-            champion_ids = []
-        multi_query_params = {
-            "champion": champion_ids,
-            "queue": queues,
-            "season": seasons
-        }
+    def matchlist_by_account(self, puuid: str, queue: int = 420, type_: str = "", end_time: int = "",
+                             begin_time: int = "", start_index: str = "", count: int = 100) -> dict:
         query_params = {
             "endTime": end_time,
             "beginTime": begin_time,
-            "endIndex": end_index,
-            "beginIndex": begin_index
+            "start": start_index,
+            "count": count,
+            "queue": queue,
+            "type": type_,
         }
         return self.session.get(
-            f'https://{self.region}.api.riotgames.com/lol/match/v4/matchlists/by-account/{encrypted_account_id}?'
+            f'https://{self.extended_region}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?'
             + ''.join([k + "=" + str(v) + "&" for k, v in query_params.items() if v])
-            + ''.join([k + "=" + str(i) + "&" for k, v in multi_query_params.items() for i in v])
         ).json()
 
     def timeline_by_id(self, match_id: str) -> str:
         return self.session.get(
-            f'https://{self.region}.api.riotgames.com/lol/match/v4/timelines/by-match/{match_id}'
+            f'https://{self.extended_region}.api.riotgames.com/lol/match/v5/matches/{match_id}/timeline'
         ).json()
 
     # ----------------------- Helper functions -----------------------
 
-    def by_id_official(self, match_id, platform, game_hash, cookies):
-        return self.session.get(
-            f"https://acs.leagueoflegends.com/v1/stats/game/{platform}/{match_id}?gameHash={game_hash}",
-            cookies={c.split("=")[0]: c.split("=")[1] for c in cookies.split(";")}
-        ).json()
-
-    def timeline_by_id_official(self, match_id, platform, game_hash, cookies):
-        return self.session.get(
-            f"https://acs.leagueoflegends.com/v1/stats/game/{platform}/{match_id}/timeline?gameHash={game_hash}",
-            cookies={c.split("=")[0]: c.split("=")[1] for c in cookies.split(";")}
-        ).json()
+    def is_champ_in_game(self, champion_id, match_data):
+        for participant in match_data['info']['participants']:
+            if str(participant['championId']) == str(champion_id):
+                return True
+        return False
 
     def get_combined_game_info(self, match_id):
         return {
@@ -64,20 +52,20 @@ class Match:
             "timeline": self.timeline_by_id(match_id)
         }
 
-    # NB: Will not work on custom game data since indentities of participants is hidden
-    def account_id_for_participant(self, participant_id, match_data):
-        account_id = [player["player"]['currentAccountId'] for player in match_data["participantIdentities"] if
+    # NB: Will not work on custom game data since identities of participants is hidden
+    def puuid_for_participant(self, participant_id, match_data):
+        account_id = [player["player"]['currentAccountId'] for player in match_data["participants"] if
                       player["participantId"] == participant_id][0]
         return account_id
 
-    # NB: Will not work on custom game data since indentities of participants is hidden
-    def participant_id_for_summoner(self, summoner_id, match_data):
-        part_id = [player['participantId'] for player in match_data["participantIdentities"] if
-                   player["player"]["currentAccountId"] == summoner_id][0]
+    # NB: Will not work on custom game data since identities of participants is hidden
+    def participant_id_for_summoner(self, puuid, match_data):
+        part_id = [player['participantId'] for player in match_data["participants"] if
+                   player["puuid"] == puuid][0]
         return part_id
 
     def summoner_for_participant(self, participant_id, match_data):
-        summoner_name = [player["player"]['summonerName'] for player in match_data["participantIdentities"] if
+        summoner_name = [player["summonerName"] for player in match_data["participants"] if
                          player["participantId"] == participant_id][0]
         return summoner_name
 
@@ -85,10 +73,10 @@ class Match:
         side = [info for info in match_data["participants"] if info['participantId'] == participant_id][0]['teamId']
         return "blue" if side == 100 else "red"
 
-    def games_for_day(self, day, summoner_id):
+    def games_for_day(self, day, puuid):
         matches = self.matchlist_by_account(
-            summoner_id,
-            queues=[420],
+            puuid,
+            queue=420,
             begin_time=int(datetime.strptime(day, '%Y-%m-%d').timestamp()) * 1000,
             end_time=(int(datetime.strptime(day, '%Y-%m-%d').timestamp()) + 86400) * 1000)
         try:
@@ -97,73 +85,60 @@ class Match:
             return []
 
     def kills_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
-        participant_stats = participant_info['stats']
-        return participant_stats['kills']
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
+        return participant_info['kills']
 
     def deaths_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
-        participant_stats = participant_info['stats']
-        return participant_stats['deaths']
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
+        return participant_info['deaths']
 
     def assists_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
-        participant_stats = participant_info['stats']
-        return participant_stats['assists']
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
+        return participant_info['assists']
 
     def kpp_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
-        participant_stats = participant_info['stats']
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
 
         if int(participant_id) <= 5:
             total_team_kills = sum([self.kills_for_participant(id, match_data) for id in range(1, 6)])
         else:
             total_team_kills = sum([self.kills_for_participant(id, match_data) for id in range(6, 11)])
 
-        if not total_team_kills: return 0
-        return ((participant_stats['kills'] + participant_stats['assists']) / total_team_kills) * 100
+        if not total_team_kills:
+            return 0
+        return ((participant_info['kills'] + participant_info['assists']) / total_team_kills) * 100
 
     def dmg_to_champs_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
-        participant_stats = participant_info['stats']
-        participant_dmg = participant_stats['totalDamageDealtToChampions']
-        return participant_dmg
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
+        return participant_info['totalDamageDealtToChampions']
 
     def tot_dmg_to_champs_per_min_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
-        participant_stats = participant_info['stats']
-        return participant_stats['totalDamageDealtToChampions'] / (match_data['gameDuration'] / 60)
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
+        return participant_info['totalDamageDealtToChampions'] / (match_data['gameDuration'] / 60)
 
     def gold_per_min_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
         participant_stats = participant_info['stats']
         return participant_stats['goldEarned'] / (match_data['gameDuration'] / 60)
 
     def vision_score_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
-        participant_stats = participant_info['stats']
-
-        return participant_stats['visionScore']
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
+        return participant_info['visionScore']
 
     def kdr_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
-        participant_stats = participant_info['stats']
-        deaths = participant_stats['deaths']
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
+        deaths = participant_info['deaths']
         if not deaths: deaths = 1
-        return (participant_stats['kills'] + participant_stats['assists']) / deaths
+        return (participant_info['kills'] + participant_info['assists']) / deaths
 
     def kda_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
-        participant_stats = participant_info['stats']
-
-        return str(participant_stats['kills']) + "/" + str(participant_stats['deaths']) + "/" + str(
-            participant_stats['assists'])
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
+        return str(participant_info['kills']) + "/" + str(participant_info['deaths']) + "/" + str(
+            participant_info['assists'])
 
     def win_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
-        participant_stats = participant_info['stats']
-
-        return participant_stats['win']
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
+        return participant_info['win']
 
     def csdiff_at_10_for_participant(self, participant_id, match_data, timeline_data):
         minute_10_frames = timeline_data['frames'][10]['participantFrames']
@@ -196,24 +171,18 @@ class Match:
         return participant_info['xp'] - opponent_participant_info['xp']
 
     def control_wards_purchased_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
-        participant_stats = participant_info['stats']
-        control_wards_purchased = participant_stats['visionWardsBoughtInGame']
-
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
+        control_wards_purchased = participant_info['visionWardsBoughtInGame']
         return float(control_wards_purchased)
 
     def wards_placed_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
-        participant_stats = participant_info['stats']
-        wards_placed = participant_stats['wardsPlaced']
-
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
+        wards_placed = participant_info['wardsPlaced']
         return float(wards_placed)
 
     def wards_destroyed_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
-        participant_stats = participant_info['stats']
-        wards_destroyed = participant_stats['wardsKilled']
-
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
+        wards_destroyed = participant_info['wardsKilled']
         return float(wards_destroyed)
 
     def control_wards_placed_for_participant(self, participant_id, timeline_data):
@@ -274,29 +243,29 @@ class Match:
 
     def death_total_for_participant_team(self, participant_id, match_data):
         if int(participant_id) <= 5:
-            total_team_deaths = sum([info['stats']['deaths']
-                                     for info in match_data['participants'] if int(info['participantId']) <= 5])
+            total_team_deaths = sum([info['deaths']
+                                     for info in match_data['info']['participants'] if int(info['participantId']) <= 5])
         else:
-            total_team_deaths = sum([info['stats']['deaths']
-                                     for info in match_data['participants'] if int(info['participantId']) >= 5])
+            total_team_deaths = sum([info['deaths']
+                                     for info in match_data['info']['participants'] if int(info['participantId']) >= 5])
         return total_team_deaths
 
     def kill_total_for_participant_team(self, participant_id, match_data):
         if int(participant_id) <= 5:
-            total_team_kills = sum([info['stats']['kills']
-                                    for info in match_data['participants'] if int(info['participantId']) <= 5])
+            total_team_kills = sum([info['kills']
+                                    for info in match_data['info']['participants'] if int(info['participantId']) <= 5])
         else:
-            total_team_kills = sum([info['stats']['kills']
-                                    for info in match_data['participants'] if int(info['participantId']) >= 5])
+            total_team_kills = sum([info['kills']
+                                    for info in match_data['info']['participants'] if int(info['participantId']) >= 5])
         return total_team_kills
 
     def dmg_total_for_participant_team(self, participant_id, match_data):
         if int(participant_id) <= 5:
-            total_team_dmg = sum([info['stats']['totalDamageDealtToChampions']
-                                  for info in match_data['participants'] if int(info['participantId']) <= 5])
+            total_team_dmg = sum([info['totalDamageDealtToChampions']
+                                  for info in match_data['info']['participants'] if int(info['participantId']) <= 5])
         else:
-            total_team_dmg = sum([info['stats']['totalDamageDealtToChampions']
-                                  for info in match_data['participants'] if int(info['participantId']) >= 5])
+            total_team_dmg = sum([info['totalDamageDealtToChampions']
+                                  for info in match_data['info']['participants'] if int(info['participantId']) >= 5])
         return total_team_dmg
 
     def dmg_percent_for_participant(self, participant_id, match_data):
@@ -305,40 +274,37 @@ class Match:
         return (participant_dmg / total_team_dmg) * 100
 
     def cs_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
-        participant_stats = participant_info['stats']
-        total_cs_killed = participant_stats['totalMinionsKilled']
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
+        total_cs_killed = participant_info['totalMinionsKilled']
         return total_cs_killed
 
     def cs_per_min_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
-        participant_stats = participant_info['stats']
-        total_cs_killed = participant_stats['totalMinionsKilled']
-
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
+        total_cs_killed = participant_info['totalMinionsKilled']
         game_length_in_minutes = match_data['gameDuration'] / 60
 
         return total_cs_killed / game_length_in_minutes
 
     def champion_for_participant(self, participant_id, match_data):
-        participant_info = [info for info in match_data['participants'] if info['participantId'] == participant_id][0]
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
         champion_id = participant_info['championId']
         champion_name = self.champion.by_id(champion_id).get('name')
 
         return champion_name
 
-    def role_for_participant(self, participant_id, match_data, timeline_data):
-        roles = roleml.predict(match_data, timeline_data)
-        participant_role = roles[int(participant_id)]
+    def role_for_participant(self, participant_id, match_data):
+        participant_info = [info for info in match_data['info']['participants'] if info['participantId'] == participant_id][0]
+        participant_role = participant_info['individualPosition']
         return participant_role
 
     def lane_opponent_for_participant(self, participant_id, match_data, timeline_data):
-        roles = roleml.predict(match_data, timeline_data)
-        participant_role = roles[int(participant_id)]
-        opponent_participant_id = \
-            [id for id, role in roles.items() if role == participant_role and id != int(participant_id)][0]
 
+        participant_role = self.role_for_participant(participant_id)
+        opponent_participant_id = [info['participantId'] for info in match_data['info']['participants']
+                                   if participant_role == info['individualPosition']
+                                   and participant_id != info['participantId']]
         opponent_info = \
-            [info for info in match_data['participants'] if info['participantId'] == opponent_participant_id][0]
+            [info for info in match_data['info']['participants'] if info['participantId'] == opponent_participant_id][0]
         champion_id = opponent_info['championId']
         champion_name = self.champion.by_id(champion_id).get('name')
         return champion_name
@@ -415,21 +381,23 @@ class Match:
         return participant_info['totalGold'] - opponent_participant_info['totalGold']
 
     def first_blood_for_side(self, side, match_data):
-        side_info = [info for info in match_data['teams'] if info['teamId'] == side][0]
+        side_info = [info for info in match_data['info']['participants']
+                     if info['firstBloodKill']
+                     and info['teamId'] == side][0]
         return side_info['firstBlood']
 
     def first_turret_for_side(self, side, match_data):
-        side_info = [info for info in match_data['teams'] if info['teamId'] == side][0]
-        return side_info['firstTower']
+        side_info = [info['objectives'] for info in match_data['teams'] if info['teamId'] == side][0]
+        return side_info['tower']['first']
 
     def heralds_for_side(self, side, match_data):
-        side_info = [info for info in match_data['teams'] if info['teamId'] == side][0]
-        return side_info['riftHeraldKills']
+        side_info = [info['objectives'] for info in match_data['teams'] if info['teamId'] == side][0]
+        return side_info['riftHerald']['kills']
 
     def barons_for_side(self, side, match_data):
-        side_info = [info for info in match_data['teams'] if info['teamId'] == side][0]
-        return side_info['baronKills']
+        side_info = [info['objectives'] for info in match_data['teams'] if info['teamId'] == side][0]
+        return side_info['baron']['kills']
 
     def dragons_for_side(self, side, match_data):
-        side_info = [info for info in match_data['teams'] if info['teamId'] == side][0]
-        return side_info['dragonKills']
+        side_info = [info['objectives'] for info in match_data['teams'] if info['teamId'] == side][0]
+        return side_info['dragon']['kills']

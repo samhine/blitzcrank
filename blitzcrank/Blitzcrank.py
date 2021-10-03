@@ -12,6 +12,7 @@ class Blitzcrank:
     def __init__(self, secret, region):
         self.secret = secret
         self.region = region
+        self.extended_region = self._configure_regions(region)
 
         self.secret = secret
         self.session = Session(secret)
@@ -34,6 +35,14 @@ class Blitzcrank:
         self.champion_mastery = ChampionMastery(self.region, self.session)
         self.champion = Champion(self.region, self.session)
         self.item = Item(self.region, self.session)
+
+    def _configure_regions(self, region):
+        if region in ["euw1", "eun1", "tr1", "ru"]:
+            return "europe"
+        elif region in ["na1", "br1", "la1", "la2", "oc1"]:
+            return "americas"
+        elif region in ["kr", "jp1"]:
+            return "asia"
 
     # Grab will contain functions which grab data with limited context, useful for large scale analysis
     # e.g. games on a certain champion, matches in a certain elo, players of a certain elo
