@@ -30,7 +30,7 @@ class Blitzcrank:
 
     def _reload_endpoints(self):
         self.summoner = Summoner(self.region, self.session)
-        self.match = Match(self.region, self.session)
+        self.match = Match(self.region, self.extended_region, self.session)
         self.league = League(self.region, self.session)
         self.champion_mastery = ChampionMastery(self.region, self.session)
         self.champion = Champion(self.region, self.session)
